@@ -64,6 +64,7 @@
         }
         .btn-primary { background: var(--primary); color: #fff; }
         .btn-primary:hover { background: #006bb3; }
+        .btn-primary:disabled { background: #aaa; cursor: not-allowed; }
         .btn-danger { background: var(--danger); color: #fff; }
         .btn-danger:hover { background: #b80000; }
         .btn-sm { padding: 6px 14px; font-size: 13px; }
@@ -179,11 +180,11 @@
 
         /* 登录遮罩 */
         .login-overlay {
-            display: none; position: fixed; top:0; left:0; right:0; bottom:0;
-            background: rgba(255,255,255,0.95); z-index: 100;
+            display: flex; position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(255,255,255,0.97); z-index: 100;
             justify-content: center; align-items: center;
         }
-        .login-overlay.show { display: flex; }
+        .login-overlay.hide { display: none; }
         .login-box {
             text-align: center; padding: 50px 40px;
             background: #fff; border-radius: 16px;
@@ -193,12 +194,12 @@
         .login-box .icon { font-size: 56px; margin-bottom: 16px; }
         .login-box h2 { font-size: 22px; color: var(--primary); margin-bottom: 10px; }
         .login-box p { color: var(--gray); font-size: 14px; margin-bottom: 24px; line-height: 1.6; }
-        .login-box input {
+        .login-box input[type="password"] {
             width: 100%; padding: 12px 16px; border: 2px solid var(--border);
             border-radius: 10px; font-size: 15px; margin-bottom: 14px;
             outline: none; transition: border-color 0.3s;
         }
-        .login-box input:focus { border-color: var(--primary); }
+        .login-box input[type="password"]:focus { border-color: var(--primary); }
         .login-box .btn-login {
             width: 100%; padding: 13px; font-size: 16px; border-radius: 10px;
         }
@@ -207,7 +208,7 @@
         .slider-captcha {
             width: 100%; height: 44px; background: #e8e8e8;
             border-radius: 10px; position: relative; margin-bottom: 20px;
-            user-select: none; overflow: hidden;
+            user-select: none; overflow: hidden; touch-action: none;
         }
         .slider-captcha-bg {
             position: absolute; left: 0; top: 0; height: 100%;
@@ -320,76 +321,78 @@
     <div id="fileListContent"><div class="empty-state">加载中...</div></div>
 </div>
 
+<!-- 登录遮罩（未登录时显示） -->
+<div class="login-overlay" id="loginOverlay">
+    <div class="login-box">
+        <div class="icon">🔒</div>
+        <h2>需要登录才能访问</h2>
+        <p>本页面为私有文件管理平台<br>请输入 GitHub Token 以验证身份</p>
+        <input type="password" id="loginTokenInput" placeholder="输入 GitHub Personal Access Token" autocomplete="off">
+        <!-- 滑块验证码 -->
+        <div class="slider-captcha" id="sliderCaptcha">
+            <div class="slider-captcha-bg" id="sliderBg"></div>
+            <div class="slider-captcha-text" id="sliderText">→ 向右滑动完成验证 →</div>
+            <div class="slider-captcha-btn" id="sliderBtn">☰</div>
+        </div>
+        <button class="btn btn-primary btn-login" onclick="doLogin()" id="loginBtn" disabled>🔑 登 录</button>
+        <p style="margin-top:16px;font-size:12px;color:var(--gray)">
+            🔗 获取 Token：<a href="https://github.com/settings/tokens/new?scopes=repo&description=File%20Upload" target="_blank">点击生成</a>（勾选 <code>repo</code> 权限）
+        </p>
+    </div>
+</div>
+
 <script>
 // ============================================================
 // 配置区 - 修改为你的信息
 // ============================================================
 const CONFIG = {
-    repo: 'gl666cn-cpu/ggglll',   // ← GitHub 用户名/仓库名
+    repo: 'gl666cn-cpu/ggglll',
     branch: 'main',
     uploadsDir: 'uploads',
-    maxSize: 50 * 1024 * 1024,         // 50MB 单文件限制
+    maxSize: 50 * 1024 * 1024,
 };
 
 // ============================================================
-// 安全策略：文件类型白名单 + 黑名单
+// 安全策略：文件类型黑名单
 // ============================================================
-
-// 危险文件扩展名黑名单（严格禁止）
 const BLOCKED_EXTS = [
-    // 可执行程序
-    'exe', 'msi', 'app', 'dmg', 'deb', 'rpm', 'pkg',
-    // Windows 脚本/批处理
-    'bat', 'cmd', 'ps1', 'psm1', 'psd1', 'vbs', 'vbe', 'jsf', 'wsf', 'wsh', 'wsc',
-    'hta', 'sct', 'inf', 'reg', 'scf', 'url', 'pif', 'com', 'scr', 'cpl',
-    // Unix/Linux 脚本
-    'sh', 'bash', 'zsh', 'fish', 'ksh', 'csh', 'tcsh',
-    // Web 服务端脚本
-    'php', 'php3', 'php4', 'php5', 'phtml', 'phar',
-    'asp', 'aspx', 'asa', 'ascx', 'ashx', 'asmx', 'svc',
-    'jsp', 'jspx', 'jspa', 'jsw', 'jsv', 'cgi', 'fcgi', 'pl', 'pm', 'pyo', 'pyc', 'pyw',
-    // 系统文件
-    'dll', 'sys', 'drv', 'ocx', 'tlb', 'ax', 'acm', 'tsp', 'vxd', '386', 'olb',
-    'lib', 'so', 'dylib', 'framework', 'bundle',
-    // Office 宏文档（含宏，可执行恶意代码）
-    'docm', 'xlsm', 'xlam', 'xltm', 'potm', 'ppam', 'ppsm', 'sldm',
-    'dotm', 'xlb', 'xll', 'mde', 'accde', 'adp', 'mda', 'mdw', 'mdt',
-    // 其他危险类型
-    'jar', 'war', 'ear', 'class', 'bin', 'obj', 'out', 'run', 'gadget',
-    'ins', 'isp', 'cer', 'crt', 'der', 'p7b', 'p7c', 'sst', 'stl',
-    'key', 'pfx', 'p12', 'pem', 'csr', 'crl',
-    'htaccess', 'htpasswd', 'ini', 'conf', 'env', 'bak', 'old',
-    'vbproj', 'csproj', 'sln', 'dsproj', 'workflow', 'yml', 'yaml',
+    'exe','msi','app','dmg','deb','rpm','pkg',
+    'bat','cmd','ps1','psm1','psd1','vbs','vbe','jsf','wsf','wsh','wsc',
+    'hta','sct','inf','reg','scf','url','pif','com','scr','cpl',
+    'sh','bash','zsh','fish','ksh','csh','tcsh',
+    'php','php3','php4','php5','phtml','phar',
+    'asp','aspx','asa','ascx','ashx','asmx','svc',
+    'jsp','jspx','jspa','jsw','jsv','cgi','fcgi','pl','pm','pyo','pyc','pyw',
+    'dll','sys','drv','ocx','tlb','ax','acm','tsp','vxd','386','olb',
+    'lib','so','dylib','framework','bundle',
+    'docm','xlsm','xlam','xltm','potm','ppam','ppsm','sldm',
+    'dotm','xlb','xll','mde','accde','adp','mda','mdw','mdt',
+    'jar','war','ear','class','bin','obj','out','run','gadget',
+    'ins','isp','cer','crt','der','p7b','p7c','sst','stl',
+    'key','pfx','p12','pem','csr','crl',
+    'htaccess','htpasswd','ini','conf','env','bak','old',
+    'vbproj','csproj','sln','dsproj','workflow','yml','yaml',
 ];
-
-// 危险的 MIME 类型黑名单
 const BLOCKED_MIMES = [
-    'application/x-dosexec', 'application/x-executable', 'application/x-msdownload',
-    'application/x-msdos-program', 'application/x-sh', 'application/x-shellscript',
-    'application/x-php', 'application/x-httpd-php', 'application/x-asp',
-    'application/java-archive', 'application/vnd.ms-office.documentmacrosenabled',
+    'application/x-dosexec','application/x-executable','application/x-msdownload',
+    'application/x-msdos-program','application/x-sh','application/x-shellscript',
+    'application/x-php','application/x-httpd-php','application/x-asp',
+    'application/java-archive',
+    'application/vnd.ms-office.documentmacrosenabled',
     'application/vnd.ms-excel.sheet.macroEnabled.12',
     'application/vnd.ms-powerpoint.presentation.macroEnabled.12',
     'application/vnd.ms-word.document.macroEnabled.12',
-    'text/x-script.python', 'text/x-script.perl', 'text/x-script.sh',
+    'text/x-script.python','text/x-script.perl','text/x-script.sh',
 ];
-
-// 文件扩展名 → 图标映射
 const FILE_ICONS = {
-    // 图片
-    jpg:'🖼️', jpeg:'🖼️', png:'🖼️', gif:'🖼️', bmp:'🖼️', webp:'🖼️', svg:'🖼️', ico:'🖼️', tiff:'🖼️', tif:'🖼️',
-    // 文档
-    pdf:'📄', doc:'📝', docx:'📝', xls:'📊', xlsx:'📊', ppt:'📽️', pptx:'📽️',
-    txt:'📃', csv:'📋', md:'📝', rtf:'📄', odt:'📄', ods:'📊', odp:'📽️',
-    // 压缩包
-    zip:'📦', rar:'📦', '7z':'📦', tar:'📦', gz:'📦', bz2:'📦', xz:'📦',
-    // 音视频
-    mp3:'🎵', wav:'🎵', flac:'🎵', ogg:'🎵', aac:'🎵', m4a:'🎵', wma:'🎵',
-    mp4:'🎬', avi:'🎬', mov:'🎬', mkv:'🎬', wmv:'🎬', flv:'🎬', webm:'🎬',
-    // 代码
-    html:'💻', css:'🎨', js:'💻', json:'📋', xml:'📋', py:'🐍', c:'⚙️', cpp:'⚙️',
-    java:'☕', go:'🔵', rs:'🦀', ts:'💙', vue:'💚', jsx:'⚛️',
-    // 其他
+    jpg:'🖼️',jpeg:'🖼️',png:'🖼️',gif:'🖼️',bmp:'🖼️',webp:'🖼️',svg:'🖼️',ico:'🖼️',tiff:'🖼️',tif:'🖼️',
+    pdf:'📄',doc:'📝',docx:'📝',xls:'📊',xlsx:'📊',ppt:'📽️',pptx:'📽️',
+    txt:'📃',csv:'📋',md:'📝',rtf:'📄',odt:'📄',ods:'📊',odp:'📽️',
+    zip:'📦',rar:'📦','7z':'📦',tar:'📦',gz:'📦',bz2:'📦',xz:'📦',
+    mp3:'🎵',wav:'🎵',flac:'🎵',ogg:'🎵',aac:'🎵',m4a:'🎵',wma:'🎵',
+    mp4:'🎬',avi:'🎬',mov:'🎬',mkv:'🎬',wmv:'🎬',flv:'🎬',webm:'🎬',
+    html:'💻',css:'🎨',js:'💻',json:'📋',py:'🐍',c:'⚙️',cpp:'⚙️',
+    java:'☕',go:'🔵',rs:'🦀',ts:'💙',vue:'💚',jsx:'⚛️',
     default:'📁'
 };
 
@@ -398,11 +401,11 @@ const FILE_ICONS = {
 // ============================================================
 let selectedFiles = [];
 let githubToken = localStorage.getItem('github_token') || '';
+let sliderVerified = false;
 
 // 初始化
 document.addEventListener('DOMContentLoaded', () => {
     if (githubToken) {
-        // 验证缓存的 Token 是否仍然有效
         fetch('https://api.github.com/user', {
             headers: { 'Authorization': `token ${githubToken}` }
         })
@@ -414,7 +417,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 hideLoginOverlay();
                 loadFileList();
             } else {
-                // Token 失效，清除并显示登录
                 githubToken = '';
                 localStorage.removeItem('github_token');
                 showLoginOverlay();
@@ -424,38 +426,43 @@ document.addEventListener('DOMContentLoaded', () => {
     } else {
         showLoginOverlay();
     }
+
+    // 初始化滑块验证码
+    initSlider();
 });
 
 // ============================================================
-// 认证相关
+// 登录遮罩控制
 // ============================================================
 function showLoginOverlay() {
-    document.getElementById('loginOverlay').classList.add('show');
-    // 隐藏主内容（上传区 + 文件列表）
+    document.getElementById('loginOverlay').classList.remove('hide');
     document.querySelector('.upload-section').style.display = 'none';
     document.querySelector('.files-section').style.display = 'none';
+    document.getElementById('authSection').style.display = 'none';
 }
 
 function hideLoginOverlay() {
-    document.getElementById('loginOverlay').classList.remove('show');
+    document.getElementById('loginOverlay').classList.add('hide');
     document.querySelector('.upload-section').style.display = '';
     document.querySelector('.files-section').style.display = '';
+    document.getElementById('authSection').style.display = '';
 }
 
 function doLogin() {
     const token = document.getElementById('loginTokenInput').value.trim();
     if (!token) { showToast('请输入 Token', 'error'); return; }
-    
-    // 保存到主输入框并调用 saveToken
+    if (!sliderVerified) { showToast('请先完成滑块验证', 'error'); return; }
     document.getElementById('tokenInput').value = token;
     saveToken();
 }
 
+// ============================================================
+// 认证相关
+// ============================================================
 function saveToken() {
     const token = document.getElementById('tokenInput').value.trim();
-    if (!token) { showToast('请输入 Token', 'error'); return; }
-    
-    // 验证 Token 是否有效
+    if (!token || token === '••••••••••••') { showToast('请输入 Token', 'error'); return; }
+
     fetch('https://api.github.com/user', {
         headers: { 'Authorization': `token ${token}` }
     })
@@ -466,8 +473,8 @@ function saveToken() {
             localStorage.setItem('github_token', token);
             document.getElementById('tokenInput').value = '••••••••••••';
             updateAuthStatus(true);
-            showToast(`✅ 已授权: ${data.login}`, 'success');
             hideLoginOverlay();
+            showToast(`✅ 已授权: ${data.login}`, 'success');
             loadFileList();
         } else {
             showToast('❌ Token 无效，请检查后重试', 'error');
@@ -501,13 +508,78 @@ function checkAuth() {
 }
 
 // ============================================================
+// 滑块验证码
+// ============================================================
+function initSlider() {
+    const container = document.getElementById('sliderCaptcha');
+    const btn = document.getElementById('sliderBtn');
+    const bg = document.getElementById('sliderBg');
+    const text = document.getElementById('sliderText');
+    const loginBtn = document.getElementById('loginBtn');
+
+    let isDragging = false;
+    let startX = 0;
+    let currentX = 0;
+
+    function getMaxSlide() {
+        return container.offsetWidth - btn.offsetWidth - 8;
+    }
+
+    function handleStart(e) {
+        if (sliderVerified) return;
+        isDragging = true;
+        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+        startX = clientX - currentX;
+        btn.style.transition = 'none';
+        bg.style.transition = 'none';
+    }
+
+    function handleMove(e) {
+        if (!isDragging || sliderVerified) return;
+        e.preventDefault();
+        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+        currentX = Math.max(0, Math.min(clientX - startX, getMaxSlide()));
+        btn.style.left = currentX + 'px';
+        bg.style.width = (currentX + 4) + 'px';
+    }
+
+    function handleEnd() {
+        if (!isDragging || sliderVerified) return;
+        isDragging = false;
+        btn.style.transition = 'left 0.3s ease';
+        bg.style.transition = 'width 0.3s ease';
+
+        if (currentX >= getMaxSlide() - 5) {
+            sliderVerified = true;
+            currentX = getMaxSlide();
+            btn.style.left = currentX + 'px';
+            bg.style.width = '100%';
+            text.textContent = '✅ 验证通过';
+            text.classList.add('verified');
+            container.classList.add('verified');
+            loginBtn.disabled = false;
+        } else {
+            currentX = 0;
+            btn.style.left = '0px';
+            bg.style.width = '0px';
+        }
+    }
+
+    btn.addEventListener('mousedown', handleStart);
+    document.addEventListener('mousemove', handleMove);
+    document.addEventListener('mouseup', handleEnd);
+    btn.addEventListener('touchstart', handleStart, { passive: false });
+    document.addEventListener('touchmove', handleMove, { passive: false });
+    document.addEventListener('touchend', handleEnd);
+}
+
+// ============================================================
 // 文件选择与验证
 // ============================================================
 const dropZone = document.getElementById('dropZone');
 const fileInput = document.getElementById('fileInput');
 
 dropZone.onclick = () => fileInput.click();
-
 dropZone.ondragover = e => { e.preventDefault(); dropZone.classList.add('dragover'); };
 dropZone.ondragleave = e => { e.preventDefault(); dropZone.classList.remove('dragover'); };
 dropZone.ondrop = e => {
@@ -528,32 +600,23 @@ function validateFile(file) {
     const ext = file.name.split('.').pop().toLowerCase();
     const errors = [];
     let blocked = false;
-
-    // 1. 检查大小
     if (file.size > CONFIG.maxSize) {
         errors.push(`文件过大 (${formatSize(file.size)} > ${formatSize(CONFIG.maxSize)})`);
         blocked = true;
     }
-
-    // 2. 检查扩展名黑名单
     if (BLOCKED_EXTS.includes(ext)) {
         errors.push(`禁止上传 .${ext} 类型文件（可能危害系统安全）`);
         blocked = true;
     }
-
-    // 3. 检查 MIME 类型
-    const mime = file.type.toLowerCase();
+    const mime = (file.type || '').toLowerCase();
     if (BLOCKED_MIMES.some(m => mime.includes(m) || m.includes(mime))) {
         errors.push(`禁止上传此类型文件（MIME: ${mime || '未知'}）`);
         blocked = true;
     }
-
-    // 4. 检查文件名（防止路径穿越等）
     if (file.name.includes('..') || file.name.includes('/') || file.name.includes('\\')) {
         errors.push('文件名包含非法字符');
         blocked = true;
     }
-
     return { ext, mime, blocked, errors, icon: FILE_ICONS[ext] || FILE_ICONS.default };
 }
 
@@ -561,18 +624,15 @@ function renderSelectedFiles() {
     const container = document.getElementById('selectedFiles');
     const btn = document.getElementById('uploadBtn');
     const countEl = document.getElementById('fileCount');
-
     if (!selectedFiles.length) {
         container.innerHTML = '';
         btn.disabled = true;
         countEl.textContent = '0';
         return;
     }
-
     const allowedCount = selectedFiles.filter(f => !f.blocked).length;
     countEl.textContent = `${allowedCount} 个允许`;
     btn.disabled = allowedCount === 0;
-
     container.innerHTML = selectedFiles.map((item, i) => `
         <div class="file-item ${item.blocked ? 'blocked' : 'allowed'}">
             <div class="file-info">
@@ -605,7 +665,6 @@ function clearFiles() {
 // ============================================================
 async function startUpload() {
     if (!checkAuth()) return;
-
     const allowed = selectedFiles.filter(f => !f.blocked);
     if (!allowed.length) { showToast('没有可上传的文件', 'error'); return; }
 
@@ -613,7 +672,6 @@ async function startUpload() {
     const progressWrap = document.getElementById('progressWrap');
     const progressFill = document.getElementById('progressFill');
     const progressText = document.getElementById('progressText');
-
     log.innerHTML = '';
     progressWrap.style.display = 'block';
 
@@ -623,25 +681,19 @@ async function startUpload() {
     for (let i = 0; i < total; i++) {
         const item = allowed[i];
         const file = item.file;
-
-        // 更新进度
         const pct = Math.round(((i) / total) * 100);
         progressFill.style.width = pct + '%';
         progressText.textContent = `正在上传 (${i+1}/${total}): ${file.name}`;
 
         try {
             const content = await toBase64(file);
-            
-            // 二次服务端验证：再次检查扩展名
             const ext = file.name.split('.').pop().toLowerCase();
             if (BLOCKED_EXTS.includes(ext)) {
                 log.innerHTML += `<div class="log-entry log-warn">⚠️ ${file.name} — 安全拦截：不允许的文件类型</div>`;
                 skipped++; continue;
             }
-
             const safeName = sanitizeFilename(file.name);
             const path = `${CONFIG.uploadsDir}/${nowStr()}_${safeName}`;
-
             const res = await fetch(
                 `https://api.github.com/repos/${CONFIG.repo}/contents/${encodeURIComponent(path)}`,
                 {
@@ -657,9 +709,7 @@ async function startUpload() {
                     })
                 }
             );
-
             const data = await res.json();
-
             if (res.ok && data.content) {
                 const dlUrl = data.content.download_url;
                 log.innerHTML += `<div class="log-entry log-success">✅ ${file.name} — <a href="${dlUrl}" target="_blank" class="file-link">下载链接</a></div>`;
@@ -668,79 +718,63 @@ async function startUpload() {
                 log.innerHTML += `<div class="log-entry log-error">❌ ${file.name} — ${(data.message || '上传失败')}</div>`;
                 fail++;
             }
-
-            // API 限速保护
             await sleep(300);
-
         } catch(e) {
             log.innerHTML += `<div class="log-entry log-error">❌ ${file.name} — ${e.message}</div>`;
             fail++;
         }
     }
 
-    // 完成
     progressFill.style.width = '100%';
     progressText.textContent = `完成！成功 ${success}，失败 ${fail}，跳过 ${skipped}`;
-    
     if (success > 0) {
         showToast(`上传完成！成功 ${success} 个文件`, 'success');
-        // 延迟刷新，等 GitHub API 同步完成（带重试）
         setTimeout(() => loadFileListWithRetry(3), 2000);
     }
 }
 
 // ============================================================
-// 文件列表
+// 文件列表（带重试）
 // ============================================================
-// 带重试的文件列表加载（解决上传后 API 延迟问题）
 async function loadFileListWithRetry(retries = 3) {
     for (let i = 0; i < retries; i++) {
         await loadFileList();
-        // 检查是否加载到了最新文件（通过比较文件数量或等待一下）
-        await sleep(1500);
+        if (i < retries - 1) await sleep(1500);
     }
 }
 
 async function loadFileList() {
     const container = document.getElementById('fileListContent');
-    
     try {
         const headers = {};
         if (githubToken) headers['Authorization'] = `token ${githubToken}`;
-
         const res = await fetch(
             `https://api.github.com/repos/${CONFIG.repo}/contents/${CONFIG.uploadsDir}`,
             { headers }
         );
-
         if (res.status === 404) {
             container.innerHTML = '<div class="empty-state">暂无上传文件</div>';
             return;
         }
-
         if (!res.ok) throw new Error('API error');
-
         const files = await res.json();
-
         if (!Array.isArray(files)) {
             container.innerHTML = '<div class="empty-state">暂无上传文件</div>';
             return;
         }
-
-        // 按时间倒序
-        files.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-
+        files.sort((a, b) => {
+            const ta = a.created_at || (a.commit && a.commit.committer && a.commit.committer.date) || 0;
+            const tb = b.created_at || (b.commit && b.commit.committer && b.commit.committer.date) || 0;
+            return new Date(tb) - new Date(ta);
+        });
         container.innerHTML = `
             <table class="file-table">
-                <thead>
-                    <tr><th>文件名</th><th>大小</th><th>时间</th><th>操作</th></tr>
-                </thead>
+                <thead><tr><th>文件名</th><th>大小</th><th>时间</th><th>操作</th></tr></thead>
                 <tbody>
                     ${files.map(f => {
                         const ext = f.name.split('.').pop().toLowerCase();
                         const icon = FILE_ICONS[ext] || FILE_ICONS.default;
                         const displayName = f.name.replace(/^\d+_/, '');
-                        // 时间兼容：created_at 不存在时用 committed_date 或显示 "-"
                         const timeVal = f.created_at || (f.commit && f.commit.committer && f.commit.committer.date) || '';
                         return `
                             <tr>
@@ -770,21 +804,13 @@ async function loadFileList() {
 async function deleteFile(filePath, displayName) {
     if (!checkAuth()) return;
     if (!confirm(`确定要删除「${displayName}」吗？此操作不可恢复！`)) return;
-
     try {
-        // 先获取文件 sha（删除必须提供）
         const res = await fetch(
             `https://api.github.com/repos/${CONFIG.repo}/contents/${encodeURIComponent(filePath)}`,
             { headers: { 'Authorization': `token ${githubToken}` } }
         );
         const fileData = await res.json();
-
-        if (!fileData.sha) {
-            showToast('❌ 获取文件信息失败', 'error');
-            return;
-        }
-
-        // 执行删除
+        if (!fileData.sha) { showToast('❌ 获取文件信息失败', 'error'); return; }
         const delRes = await fetch(
             `https://api.github.com/repos/${CONFIG.repo}/contents/${encodeURIComponent(filePath)}`,
             {
@@ -800,7 +826,6 @@ async function deleteFile(filePath, displayName) {
                 })
             }
         );
-
         if (delRes.ok) {
             showToast(`✅ 已删除: ${displayName}`, 'success');
             loadFileListWithRetry(2);
@@ -826,11 +851,10 @@ function toBase64(file) {
 }
 
 function sanitizeFilename(name) {
-    // 只保留安全的字符
     return name.replace(/[^\u4e00-\u9fa5a-zA-Z0-9._\-()（）\[\]【】\s]/g, '_')
                .replace(/\.{2,}/g, '.')
                .replace(/^\.+/, '')
-               .substring(0, 200); // 限制长度
+               .substring(0, 200);
 }
 
 function nowStr() {
@@ -844,8 +868,10 @@ function formatSize(bytes) {
 }
 
 function fmtTime(iso) {
-    const d = new Date(iso);
-    return `${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+    try {
+        const d = new Date(iso);
+        return `${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+    } catch(e) { return '-'; }
 }
 
 function escapeHtml(str) {
@@ -863,97 +889,7 @@ function showToast(msg, type='success') {
     document.body.appendChild(toast);
     setTimeout(() => toast.remove(), 3500);
 }
-
-// ============================================================
-// 滑块验证码
-// ============================================================
-(function() {
-    const container = document.getElementById('sliderCaptcha');
-    const btn = document.getElementById('sliderBtn');
-    const bg = document.getElementById('sliderBg');
-    const text = document.getElementById('sliderText');
-    const loginBtn = document.getElementById('loginBtn');
-
-    let isDragging = false;
-    let startX = 0;
-    let currentX = 0;
-    let verified = false;
-    const maxSlide = container.offsetWidth - btn.offsetWidth - 8; // 4px padding each side
-
-    function handleStart(e) {
-        if (verified) return;
-        isDragging = true;
-        startX = (e.type.includes('mouse') ? e.clientX : e.touches[0].clientX) - currentX;
-        btn.style.transition = 'none';
-        bg.style.transition = 'none';
-    }
-
-    function handleMove(e) {
-        if (!isDragging || verified) return;
-        e.preventDefault();
-        const clientX = e.type.includes('mouse') ? e.clientX : e.touches[0].clientX;
-        currentX = Math.max(0, Math.min(clientX - startX, maxSlide));
-        btn.style.left = currentX + 'px';
-        bg.style.width = (currentX + 4) + 'px'; // 4px offset for padding
-    }
-
-    function handleEnd() {
-        if (!isDragging || verified) return;
-        isDragging = false;
-        btn.style.transition = 'left 0.3s ease';
-        bg.style.transition = 'width 0.3s ease';
-
-        // 判断是否滑到最右边（误差 5px）
-        if (currentX >= maxSlide - 5) {
-            verified = true;
-            currentX = maxSlide;
-            btn.style.left = maxSlide + 'px';
-            bg.style.width = '100%';
-            text.textContent = '✅ 验证通过';
-            text.classList.add('verified');
-            container.classList.add('verified');
-            loginBtn.disabled = false;
-        } else {
-            // 弹回
-            currentX = 0;
-            btn.style.left = '0px';
-            bg.style.width = '0px';
-        }
-    }
-
-    // 鼠标事件
-    btn.addEventListener('mousedown', handleStart);
-    document.addEventListener('mousemove', handleMove);
-    document.addEventListener('mouseup', handleEnd);
-
-    // 触摸事件（移动端）
-    btn.addEventListener('touchstart', handleStart, { passive: false });
-    document.addEventListener('touchmove', handleMove, { passive: false });
-    document.addEventListener('touchend', handleEnd);
-})();
 </script>
-
-<!-- 登录遮罩（未登录时显示） -->
-<div class="login-overlay" id="loginOverlay">
-    <div class="login-box">
-        <div class="icon">🔒</div>
-        <h2>需要登录才能访问</h2>
-        <p>本页面为私有文件管理平台<br>请输入 GitHub Token 以验证身份</p>
-        <input type="password" id="loginTokenInput" placeholder="输入 GitHub Personal Access Token" autocomplete="off">
-
-        <!-- 滑块验证码 -->
-        <div class="slider-captcha" id="sliderCaptcha">
-            <div class="slider-captcha-bg" id="sliderBg"></div>
-            <div class="slider-captcha-text" id="sliderText">→ 向右滑动完成验证 →</div>
-            <div class="slider-captcha-btn" id="sliderBtn">☰</div>
-        </div>
-
-        <button class="btn btn-primary btn-login" onclick="doLogin()" id="loginBtn" disabled>🔑 登 录</button>
-        <p style="margin-top:16px;font-size:12px;color:var(--gray)">
-            🔗 获取 Token：<a href="https://github.com/settings/tokens/new?scopes=repo&description=File%20Upload" target="blank">点击生成</a>（勾选 <code>repo</code> 权限）
-        </p>
-    </div>
-</div>
 
 </body>
 </html>
