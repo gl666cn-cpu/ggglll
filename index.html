@@ -256,7 +256,7 @@
 <div class="files-section">
     <div class="files-header">
         <h3>📋 已上传的文件</h3>
-        <button class="btn btn-outline btn-sm" onclick="loadFileList()">🔄 刷新</button>
+        <button class="btn btn-outline btn-sm" onclick="loadFileListWithRetry(2)">🔄 刷新</button>
     </div>
     <div id="fileListContent"><div class="empty-state">加载中...</div></div>
 </div>
@@ -581,14 +581,24 @@ async function startUpload() {
     progressText.textContent = `完成！成功 ${success}，失败 ${fail}，跳过 ${skipped}`;
     
     if (success > 0) {
-        setTimeout(() => loadFileList(), 1000);
         showToast(`上传完成！成功 ${success} 个文件`, 'success');
+        // 延迟刷新，等 GitHub API 同步完成（带重试）
+        setTimeout(() => loadFileListWithRetry(3), 2000);
     }
 }
 
 // ============================================================
 // 文件列表
 // ============================================================
+// 带重试的文件列表加载（解决上传后 API 延迟问题）
+async function loadFileListWithRetry(retries = 3) {
+    for (let i = 0; i < retries; i++) {
+        await loadFileList();
+        // 检查是否加载到了最新文件（通过比较文件数量或等待一下）
+        await sleep(1500);
+    }
+}
+
 async function loadFileList() {
     const container = document.getElementById('fileListContent');
     
