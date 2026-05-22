@@ -177,6 +177,61 @@
         .btn-del:hover { background: var(--danger); color: #fff; }
         .empty-state { text-align: center; padding: 40px; color: var(--gray); }
 
+        /* 登录遮罩 */
+        .login-overlay {
+            display: none; position: fixed; top:0; left:0; right:0; bottom:0;
+            background: rgba(255,255,255,0.95); z-index: 100;
+            justify-content: center; align-items: center;
+        }
+        .login-overlay.show { display: flex; }
+        .login-box {
+            text-align: center; padding: 50px 40px;
+            background: #fff; border-radius: 16px;
+            box-shadow: 0 8px 40px rgba(0,0,0,0.12);
+            max-width: 460px; width: 90%;
+        }
+        .login-box .icon { font-size: 56px; margin-bottom: 16px; }
+        .login-box h2 { font-size: 22px; color: var(--primary); margin-bottom: 10px; }
+        .login-box p { color: var(--gray); font-size: 14px; margin-bottom: 24px; line-height: 1.6; }
+        .login-box input {
+            width: 100%; padding: 12px 16px; border: 2px solid var(--border);
+            border-radius: 10px; font-size: 15px; margin-bottom: 14px;
+            outline: none; transition: border-color 0.3s;
+        }
+        .login-box input:focus { border-color: var(--primary); }
+        .login-box .btn-login {
+            width: 100%; padding: 13px; font-size: 16px; border-radius: 10px;
+        }
+
+        /* 滑块验证码 */
+        .slider-captcha {
+            width: 100%; height: 44px; background: #e8e8e8;
+            border-radius: 10px; position: relative; margin-bottom: 20px;
+            user-select: none; overflow: hidden;
+        }
+        .slider-captcha-bg {
+            position: absolute; left: 0; top: 0; height: 100%;
+            background: linear-gradient(90deg, #00B050, #28a745);
+            border-radius: 10px; width: 0; transition: width 0.1s;
+        }
+        .slider-captcha-text {
+            position: absolute; width: 100%; text-align: center;
+            line-height: 44px; font-size: 13px; color: var(--gray);
+            pointer-events: none; z-index: 1;
+        }
+        .slider-captcha-text.verified { color: #fff; }
+        .slider-captcha-btn {
+            position: absolute; top: 4px; left: 4px; width: 36px; height: 36px;
+            background: #fff; border-radius: 8px; cursor: grab;
+            display: flex; align-items: center; justify-content: center;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.2); z-index: 2;
+            transition: left 0.1s; font-size: 18px;
+        }
+        .slider-captcha-btn:active { cursor: grabbing; }
+        .slider-captcha.verified .slider-captcha-btn {
+            left: calc(100% - 40px) !important; background: #00B050; color: #fff;
+        }
+
         /* Rules */
         .rules { margin-top: 20px; font-size: 12px; color: var(--gray); line-height: 1.8; }
         .rules code { background: #f0f0f0; padding: 2px 6px; border-radius: 4px; font-size: 11px; }
@@ -347,15 +402,55 @@ let githubToken = localStorage.getItem('github_token') || '';
 // 初始化
 document.addEventListener('DOMContentLoaded', () => {
     if (githubToken) {
-        document.getElementById('tokenInput').value = '••••••••••••';
-        updateAuthStatus(true);
+        // 验证缓存的 Token 是否仍然有效
+        fetch('https://api.github.com/user', {
+            headers: { 'Authorization': `token ${githubToken}` }
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.login) {
+                document.getElementById('tokenInput').value = '••••••••••••';
+                updateAuthStatus(true);
+                hideLoginOverlay();
+                loadFileList();
+            } else {
+                // Token 失效，清除并显示登录
+                githubToken = '';
+                localStorage.removeItem('github_token');
+                showLoginOverlay();
+            }
+        })
+        .catch(() => showLoginOverlay());
+    } else {
+        showLoginOverlay();
     }
-    loadFileList();
 });
 
 // ============================================================
 // 认证相关
 // ============================================================
+function showLoginOverlay() {
+    document.getElementById('loginOverlay').classList.add('show');
+    // 隐藏主内容（上传区 + 文件列表）
+    document.querySelector('.upload-section').style.display = 'none';
+    document.querySelector('.files-section').style.display = 'none';
+}
+
+function hideLoginOverlay() {
+    document.getElementById('loginOverlay').classList.remove('show');
+    document.querySelector('.upload-section').style.display = '';
+    document.querySelector('.files-section').style.display = '';
+}
+
+function doLogin() {
+    const token = document.getElementById('loginTokenInput').value.trim();
+    if (!token) { showToast('请输入 Token', 'error'); return; }
+    
+    // 保存到主输入框并调用 saveToken
+    document.getElementById('tokenInput').value = token;
+    saveToken();
+}
+
 function saveToken() {
     const token = document.getElementById('tokenInput').value.trim();
     if (!token) { showToast('请输入 Token', 'error'); return; }
@@ -372,6 +467,7 @@ function saveToken() {
             document.getElementById('tokenInput').value = '••••••••••••';
             updateAuthStatus(true);
             showToast(`✅ 已授权: ${data.login}`, 'success');
+            hideLoginOverlay();
             loadFileList();
         } else {
             showToast('❌ Token 无效，请检查后重试', 'error');
@@ -384,7 +480,9 @@ function logoutToken() {
     githubToken = '';
     localStorage.removeItem('github_token');
     document.getElementById('tokenInput').value = '';
+    document.getElementById('loginTokenInput').value = '';
     updateAuthStatus(false);
+    showLoginOverlay();
     showToast('已退出登录', 'success');
 }
 
@@ -765,7 +863,97 @@ function showToast(msg, type='success') {
     document.body.appendChild(toast);
     setTimeout(() => toast.remove(), 3500);
 }
+
+// ============================================================
+// 滑块验证码
+// ============================================================
+(function() {
+    const container = document.getElementById('sliderCaptcha');
+    const btn = document.getElementById('sliderBtn');
+    const bg = document.getElementById('sliderBg');
+    const text = document.getElementById('sliderText');
+    const loginBtn = document.getElementById('loginBtn');
+
+    let isDragging = false;
+    let startX = 0;
+    let currentX = 0;
+    let verified = false;
+    const maxSlide = container.offsetWidth - btn.offsetWidth - 8; // 4px padding each side
+
+    function handleStart(e) {
+        if (verified) return;
+        isDragging = true;
+        startX = (e.type.includes('mouse') ? e.clientX : e.touches[0].clientX) - currentX;
+        btn.style.transition = 'none';
+        bg.style.transition = 'none';
+    }
+
+    function handleMove(e) {
+        if (!isDragging || verified) return;
+        e.preventDefault();
+        const clientX = e.type.includes('mouse') ? e.clientX : e.touches[0].clientX;
+        currentX = Math.max(0, Math.min(clientX - startX, maxSlide));
+        btn.style.left = currentX + 'px';
+        bg.style.width = (currentX + 4) + 'px'; // 4px offset for padding
+    }
+
+    function handleEnd() {
+        if (!isDragging || verified) return;
+        isDragging = false;
+        btn.style.transition = 'left 0.3s ease';
+        bg.style.transition = 'width 0.3s ease';
+
+        // 判断是否滑到最右边（误差 5px）
+        if (currentX >= maxSlide - 5) {
+            verified = true;
+            currentX = maxSlide;
+            btn.style.left = maxSlide + 'px';
+            bg.style.width = '100%';
+            text.textContent = '✅ 验证通过';
+            text.classList.add('verified');
+            container.classList.add('verified');
+            loginBtn.disabled = false;
+        } else {
+            // 弹回
+            currentX = 0;
+            btn.style.left = '0px';
+            bg.style.width = '0px';
+        }
+    }
+
+    // 鼠标事件
+    btn.addEventListener('mousedown', handleStart);
+    document.addEventListener('mousemove', handleMove);
+    document.addEventListener('mouseup', handleEnd);
+
+    // 触摸事件（移动端）
+    btn.addEventListener('touchstart', handleStart, { passive: false });
+    document.addEventListener('touchmove', handleMove, { passive: false });
+    document.addEventListener('touchend', handleEnd);
+})();
 </script>
+
+<!-- 登录遮罩（未登录时显示） -->
+<div class="login-overlay" id="loginOverlay">
+    <div class="login-box">
+        <div class="icon">🔒</div>
+        <h2>需要登录才能访问</h2>
+        <p>本页面为私有文件管理平台<br>请输入 GitHub Token 以验证身份</p>
+        <input type="password" id="loginTokenInput" placeholder="输入 GitHub Personal Access Token" autocomplete="off">
+
+        <!-- 滑块验证码 -->
+        <div class="slider-captcha" id="sliderCaptcha">
+            <div class="slider-captcha-bg" id="sliderBg"></div>
+            <div class="slider-captcha-text" id="sliderText">→ 向右滑动完成验证 →</div>
+            <div class="slider-captcha-btn" id="sliderBtn">☰</div>
+        </div>
+
+        <button class="btn btn-primary btn-login" onclick="doLogin()" id="loginBtn" disabled>🔑 登 录</button>
+        <p style="margin-top:16px;font-size:12px;color:var(--gray)">
+            🔗 获取 Token：<a href="https://github.com/settings/tokens/new?scopes=repo&description=File%20Upload" target="blank">点击生成</a>（勾选 <code>repo</code> 权限）
+        </p>
+    </div>
+</div>
 
 </body>
 </html>
