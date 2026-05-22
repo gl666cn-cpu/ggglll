@@ -167,10 +167,14 @@
             background: #f5f7fa; font-size: 13px; color: var(--gray);
             border-bottom: 2px solid var(--border);
         }
-        .file-table td { padding: 10px 12px; border-bottom: 1px solid #f0f0f0; font-size: 14px; }
+        .file-table td { padding: 10px 12px; border-bottom: 1px solid #f0f0f0; font-size: 14px; vertical-align: middle; }
         .file-table tr:hover td { background: #fafcff; }
         .file-link { color: var(--primary); text-decoration: none; word-break: break-all; }
         .file-link:hover { text-decoration: underline; }
+        .action-btns { display: flex; gap: 6px; flex-wrap: nowrap; align-items: center; }
+        .action-btns .btn { padding: 5px 10px; font-size: 12px; white-space: nowrap; }
+        .btn-del { background: transparent; border: 1px solid var(--danger); color: var(--danger); border-radius: 6px; cursor: pointer; font-size: 12px; padding: 5px 10px; white-space: nowrap; transition: all 0.2s; }
+        .btn-del:hover { background: var(--danger); color: #fff; }
         .empty-state { text-align: center; padding: 40px; color: var(--gray); }
 
         /* Rules */
@@ -637,14 +641,20 @@ async function loadFileList() {
                     ${files.map(f => {
                         const ext = f.name.split('.').pop().toLowerCase();
                         const icon = FILE_ICONS[ext] || FILE_ICONS.default;
-                        // 去掉时间戳前缀显示
                         const displayName = f.name.replace(/^\d+_/, '');
+                        // 时间兼容：created_at 不存在时用 committed_date 或显示 "-"
+                        const timeVal = f.created_at || (f.commit && f.commit.committer && f.commit.committer.date) || '';
                         return `
                             <tr>
                                 <td>${icon} <a href="${f.download_url}" target="_blank" class="file-link">${escapeHtml(displayName)}</a></td>
                                 <td>${formatSize(f.size)}</td>
-                                <td style="font-size:12px;color:var(--gray)">${fmtTime(f.created_at)}</td>
-                                <td><a href="${f.download_url}" download class="btn btn-outline btn-sm">下载</a></td>
+                                <td style="font-size:12px;color:var(--gray)">${timeVal ? fmtTime(timeVal) : '-'}</td>
+                                <td>
+                                    <div class="action-btns">
+                                        <a href="${f.download_url}" download class="btn btn-outline btn-sm">⬇ 下载</a>
+                                        ${githubToken ? `<button class="btn-del" onclick="deleteFile('${f.path}', '${escapeHtml(displayName)}')">🗑 删除</button>` : ''}
+                                    </div>
+                                </td>
                             </tr>`;
                     }).join('')}
                 </tbody>
@@ -653,6 +663,55 @@ async function loadFileList() {
         `;
     } catch(e) {
         container.innerHTML = `<div class="empty-state">加载失败: ${e.message}</div>`;
+    }
+}
+
+// ============================================================
+// 删除文件
+// ============================================================
+async function deleteFile(filePath, displayName) {
+    if (!checkAuth()) return;
+    if (!confirm(`确定要删除「${displayName}」吗？此操作不可恢复！`)) return;
+
+    try {
+        // 先获取文件 sha（删除必须提供）
+        const res = await fetch(
+            `https://api.github.com/repos/${CONFIG.repo}/contents/${encodeURIComponent(filePath)}`,
+            { headers: { 'Authorization': `token ${githubToken}` } }
+        );
+        const fileData = await res.json();
+
+        if (!fileData.sha) {
+            showToast('❌ 获取文件信息失败', 'error');
+            return;
+        }
+
+        // 执行删除
+        const delRes = await fetch(
+            `https://api.github.com/repos/${CONFIG.repo}/contents/${encodeURIComponent(filePath)}`,
+            {
+                method: 'DELETE',
+                headers: {
+                    'Authorization': `token ${githubToken}`,
+                    'Accept': 'application/vnd.github.v3+json'
+                },
+                body: JSON.stringify({
+                    message: `🗑 Delete: ${displayName}`,
+                    sha: fileData.sha,
+                    branch: CONFIG.branch
+                })
+            }
+        );
+
+        if (delRes.ok) {
+            showToast(`✅ 已删除: ${displayName}`, 'success');
+            loadFileListWithRetry(2);
+        } else {
+            const err = await delRes.json();
+            showToast(`❌ 删除失败: ${err.message || '未知错误'}`, 'error');
+        }
+    } catch(e) {
+        showToast(`❌ 删除失败: ${e.message}`, 'error');
     }
 }
 
