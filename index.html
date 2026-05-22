@@ -265,7 +265,7 @@
 </div>
 
 <!-- Auth -->
-<div class="auth-section" id="authSection">
+<div class="auth-section" id="authSection" style="display:none">
     <h3>🔐 GitHub 授权</h3>
     <div class="token-input-group">
         <input type="password" id="tokenInput" placeholder="输入 GitHub Personal Access Token（首次使用需要）" autocomplete="off">
@@ -281,7 +281,7 @@
 </div>
 
 <!-- Upload -->
-<div class="upload-section">
+<div class="upload-section" style="display:none">
     <div class="drop-zone" id="dropZone">
         <div class="icon">📂</div>
         <p><strong>点击选择文件</strong> 或拖拽到此处</p>
@@ -313,7 +313,7 @@
 </div>
 
 <!-- File List -->
-<div class="files-section">
+<div class="files-section" style="display:none">
     <div class="files-header">
         <h3>📋 已上传的文件</h3>
         <button class="btn btn-outline btn-sm" onclick="loadFileListWithRetry(2)">🔄 刷新</button>
@@ -321,8 +321,8 @@
     <div id="fileListContent"><div class="empty-state">加载中...</div></div>
 </div>
 
-<!-- 登录遮罩（未登录时显示） -->
-<div class="login-overlay" id="loginOverlay">
+<!-- 登录遮罩（未登录时显示，默认隐藏由JS控制） -->
+<div class="login-overlay hide" id="loginOverlay">
     <div class="login-box">
         <div class="icon">🔒</div>
         <h2>需要登录才能访问</h2>
@@ -439,6 +439,15 @@ function showLoginOverlay() {
     document.querySelector('.upload-section').style.display = 'none';
     document.querySelector('.files-section').style.display = 'none';
     document.getElementById('authSection').style.display = 'none';
+    // 重置滑块状态
+    sliderVerified = false;
+    document.getElementById('sliderBtn').style.left = '4px';
+    document.getElementById('sliderBg').style.width = '0px';
+    document.getElementById('sliderText').textContent = '→ 向右滑动完成验证 →';
+    document.getElementById('sliderText').classList.remove('verified');
+    document.getElementById('sliderCaptcha').classList.remove('verified');
+    document.getElementById('loginBtn').disabled = true;
+    document.getElementById('loginTokenInput').value = '';
 }
 
 function hideLoginOverlay() {
