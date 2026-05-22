@@ -1,1 +1,702 @@
-<h1>HTTPS 域名测试成功！Hello Vercel!</h1>
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>文件上传 - 安全文件分享</title>
+    <style>
+        :root {
+            --primary: #007ECC;
+            --primary-light: #e6f4ff;
+            --danger: #DE0000;
+            --danger-light: #fff0f0;
+            --success: #00B050;
+            --text: #262626;
+            --gray: #7F7F7F;
+            --border: #ddd;
+            --bg: #f9fbfd;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, "Microsoft YaHei", "Segoe UI", sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 30px 20px;
+            line-height: 1.6;
+        }
+
+        /* Header */
+        .header { text-align: center; margin-bottom: 30px; }
+        .header h1 { font-size: 28px; color: var(--primary); margin-bottom: 8px; }
+        .header p { color: var(--gray); font-size: 14px; }
+
+        /* Auth Section */
+        .auth-section {
+            background: #fff;
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+            border: 1px solid var(--border);
+        }
+        .auth-section h3 { margin-bottom: 12px; font-size: 16px; }
+        .token-input-group { display: flex; gap: 10px; flex-wrap: wrap; }
+        .token-input-group input {
+            flex: 1; min-width: 250px;
+            padding: 10px 14px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            font-size: 14px;
+            outline: none;
+            transition: border-color 0.3s;
+        }
+        .token-input-group input:focus { border-color: var(--primary); }
+        .btn {
+            padding: 10px 22px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-weight: 500;
+        }
+        .btn-primary { background: var(--primary); color: #fff; }
+        .btn-primary:hover { background: #006bb3; }
+        .btn-danger { background: var(--danger); color: #fff; }
+        .btn-danger:hover { background: #b80000; }
+        .btn-sm { padding: 6px 14px; font-size: 13px; }
+        .btn-outline { background: transparent; border: 1px solid var(--primary); color: var(--primary); }
+        .btn-outline:hover { background: var(--primary-light); }
+        .auth-status { margin-top: 12px; font-size: 13px; display: flex; align-items: center; gap: 6px; }
+        .status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+        .status-ok { background: var(--success); }
+        .status-no { background: var(--danger); }
+
+        /* Upload Zone */
+        .upload-section {
+            background: #fff;
+            border-radius: 12px;
+            padding: 30px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+            border: 1px solid var(--border);
+        }
+        .drop-zone {
+            border: 3px dashed var(--primary);
+            border-radius: 12px;
+            padding: 50px 30px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+            background: #fafcff;
+        }
+        .drop-zone:hover, .drop-zone.dragover {
+            background: var(--primary-light);
+            border-color: #006bb3;
+            transform: scale(1.01);
+        }
+        .drop-zone .icon { font-size: 48px; margin-bottom: 12px; }
+        .drop-zone p { color: var(--gray); font-size: 15px; }
+        .drop-zone p strong { color: var(--primary); }
+        .drop-zone input[type="file"] { display: none; }
+
+        /* Selected Files */
+        .selected-files { margin-top: 18px; }
+        .file-item {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 10px 14px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+        .file-item.blocked { background: var(--danger-light); border-left: 3px solid var(--danger); }
+        .file-item.allowed { border-left: 3px solid var(--success); }
+        .file-info { display: flex; align-items: center; gap: 10px; overflow: hidden; }
+        .file-icon { font-size: 20px; flex-shrink: 0; }
+        .file-name { font-weight: 500; word-break: break-all; }
+        .file-meta { color: var(--gray); font-size: 12px; }
+        .file-remove {
+            cursor: pointer; color: var(--danger); font-size: 18px;
+            background: none; border: none; padding: 0 4px;
+        }
+        .file-remove:hover { opacity: 0.7; }
+
+        /* Upload Button */
+        .upload-actions { margin-top: 18px; text-align: center; }
+        .upload-btn {
+            padding: 14px 40px;
+            font-size: 16px;
+            border-radius: 10px;
+        }
+        .upload-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        /* Progress */
+        .progress-wrap { margin-top: 15px; display: none; }
+        .progress-bar-bg {
+            height: 8px; background: #eee; border-radius: 4px; overflow: hidden;
+        }
+        .progress-bar-fill {
+            height: 100%; background: linear-gradient(90deg, var(--primary), #00B0F0);
+            border-radius: 4px; transition: width 0.3s; width: 0%;
+        }
+        .progress-text { font-size: 13px; color: var(--gray); margin-top: 6px; text-align: center; }
+
+        /* Result Log */
+        .result-log { margin-top: 15px; max-height: 200px; overflow-y: auto; }
+        .log-entry { padding: 8px 12px; font-size: 13px; border-radius: 6px; margin-bottom: 4px; }
+        .log-success { background: #f0fdf4; color: #166534; border-left: 3px solid var(--success); }
+        .log-error { background: var(--danger-light); color: #991b1b; border-left: 3px solid var(--danger); }
+        .log-warn { background: #fffbeb; color: #92400e; border-left: 3px solid #FFC000; }
+
+        /* File List */
+        .files-section {
+            background: #fff;
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+            border: 1px solid var(--border);
+        }
+        .files-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+        .files-header h3 { font-size: 17px; }
+        .file-table { width: 100%; border-collapse: collapse; }
+        .file-table th {
+            text-align: left; padding: 10px 12px;
+            background: #f5f7fa; font-size: 13px; color: var(--gray);
+            border-bottom: 2px solid var(--border);
+        }
+        .file-table td { padding: 10px 12px; border-bottom: 1px solid #f0f0f0; font-size: 14px; }
+        .file-table tr:hover td { background: #fafcff; }
+        .file-link { color: var(--primary); text-decoration: none; word-break: break-all; }
+        .file-link:hover { text-decoration: underline; }
+        .empty-state { text-align: center; padding: 40px; color: var(--gray); }
+
+        /* Rules */
+        .rules { margin-top: 20px; font-size: 12px; color: var(--gray); line-height: 1.8; }
+        .rules code { background: #f0f0f0; padding: 2px 6px; border-radius: 4px; font-size: 11px; }
+
+        /* Toast */
+        .toast {
+            position: fixed; top: 20px; right: 20px;
+            padding: 14px 22px; border-radius: 10px; font-size: 14px;
+            z-index: 9999; animation: slideIn 0.3s ease;
+            max-width: 360px; box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+        }
+        .toast-success { background: var(--success); color: #fff; }
+        .toast-error { background: var(--danger); color: #fff; }
+        @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+
+        /* Responsive */
+        @media (max-width: 600px) {
+            body { padding: 15px 10px; }
+            .drop-zone { padding: 30px 15px; }
+            .file-item { flex-direction: column; gap: 6px; align-items: flex-start; }
+        }
+    </style>
+</head>
+<body>
+
+<!-- Header -->
+<div class="header">
+    <h1>📁 安全文件上传</h1>
+    <p>基于 GitHub 的文件分享平台 · 支持拖拽上传 · 自动安全检测</p>
+</div>
+
+<!-- Auth -->
+<div class="auth-section" id="authSection">
+    <h3>🔐 GitHub 授权</h3>
+    <div class="token-input-group">
+        <input type="password" id="tokenInput" placeholder="输入 GitHub Personal Access Token（首次使用需要）" autocomplete="off">
+        <button class="btn btn-primary" onclick="saveToken()">保存 Token</button>
+    </div>
+    <div class="auth-status" id="authStatus">
+        <span class="status-dot status-no"></span>
+        <span>未授权 - 请输入 Token 以使用上传功能</span>
+    </div>
+    <p style="margin-top:10px;font-size:12px;color:var(--gray)">
+        🔗 获取 Token：<a href="https://github.com/settings/tokens/new?scopes=repo&description=File%20Upload" target="_blank">点击生成</a>（勾选 <code>repo</code> 权限）
+    </p>
+</div>
+
+<!-- Upload -->
+<div class="upload-section">
+    <div class="drop-zone" id="dropZone">
+        <div class="icon">📂</div>
+        <p><strong>点击选择文件</strong> 或拖拽到此处</p>
+        <p style="font-size:13px;margin-top:6px">支持多选 · 单文件最大 <strong>50MB</strong></p>
+        <input type="file" id="fileInput" multiple>
+    </div>
+
+    <div class="selected-files" id="selectedFiles"></div>
+
+    <div class="upload-actions">
+        <button class="btn btn-primary upload-btn" id="uploadBtn" onclick="startUpload()" disabled>
+            ⬆️ 上传文件 (<span id="fileCount">0</span>)
+        </button>
+        <button class="btn btn-outline btn-sm" onclick="clearFiles()" style="margin-left:8px">清空列表</button>
+    </div>
+
+    <div class="progress-wrap" id="progressWrap">
+        <div class="progress-bar-bg"><div class="progress-bar-fill" id="progressFill"></div></div>
+        <div class="progress-text" id="progressText">准备中...</div>
+    </div>
+
+    <div class="result-log" id="resultLog"></div>
+
+    <div class="rules">
+        ✅ 允许：图片、文档、压缩包、音视频、代码文本等<br>
+        ❌ 禁止：可执行程序(.exe/.bat/.cmd/.ps1/.vbs/.sh)、脚本(.php/.asp/.jsp)、<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;系统文件(.dll/.sys/.drv)、宏文档(.docm/.xlsm/.pptm)、快捷方式(.lnk/.url)等危险文件
+    </div>
+</div>
+
+<!-- File List -->
+<div class="files-section">
+    <div class="files-header">
+        <h3>📋 已上传的文件</h3>
+        <button class="btn btn-outline btn-sm" onclick="loadFileList()">🔄 刷新</button>
+    </div>
+    <div id="fileListContent"><div class="empty-state">加载中...</div></div>
+</div>
+
+<script>
+// ============================================================
+// 配置区 - 修改为你的信息
+// ============================================================
+const CONFIG = {
+    repo: 'g1666cn-cpu/ggglll',   // ← 改成你的 用户名/仓库名
+    branch: 'main',
+    uploadsDir: 'uploads',
+    maxSize: 50 * 1024 * 1024,         // 50MB 单文件限制
+};
+
+// ============================================================
+// 安全策略：文件类型白名单 + 黑名单
+// ============================================================
+
+// 危险文件扩展名黑名单（严格禁止）
+const BLOCKED_EXTS = [
+    // 可执行程序
+    'exe', 'msi', 'app', 'dmg', 'deb', 'rpm', 'pkg',
+    // Windows 脚本/批处理
+    'bat', 'cmd', 'ps1', 'psm1', 'psd1', 'vbs', 'vbe', 'jsf', 'wsf', 'wsh', 'wsc',
+    'hta', 'sct', 'inf', 'reg', 'scf', 'url', 'pif', 'com', 'scr', 'cpl',
+    // Unix/Linux 脚本
+    'sh', 'bash', 'zsh', 'fish', 'ksh', 'csh', 'tcsh',
+    // Web 服务端脚本
+    'php', 'php3', 'php4', 'php5', 'phtml', 'phar',
+    'asp', 'aspx', 'asa', 'ascx', 'ashx', 'asmx', 'svc',
+    'jsp', 'jspx', 'jspa', 'jsw', 'jsv', 'cgi', 'fcgi', 'pl', 'pm', 'pyo', 'pyc', 'pyw',
+    // 系统文件
+    'dll', 'sys', 'drv', 'ocx', 'tlb', 'ax', 'acm', 'tsp', 'vxd', '386', 'olb',
+    'lib', 'so', 'dylib', 'framework', 'bundle',
+    // Office 宏文档（含宏，可执行恶意代码）
+    'docm', 'xlsm', 'xlam', 'xltm', 'potm', 'ppam', 'ppsm', 'sldm',
+    'dotm', 'xlb', 'xll', 'mde', 'accde', 'adp', 'mda', 'mdw', 'mdt',
+    // 其他危险类型
+    'jar', 'war', 'ear', 'class', 'bin', 'obj', 'out', 'run', 'gadget',
+    'ins', 'isp', 'cer', 'crt', 'der', 'p7b', 'p7c', 'sst', 'stl',
+    'key', 'pfx', 'p12', 'pem', 'csr', 'crl',
+    'htaccess', 'htpasswd', 'ini', 'conf', 'env', 'bak', 'old',
+    'vbproj', 'csproj', 'sln', 'dsproj', 'workflow', 'yml', 'yaml',
+];
+
+// 危险的 MIME 类型黑名单
+const BLOCKED_MIMES = [
+    'application/x-dosexec', 'application/x-executable', 'application/x-msdownload',
+    'application/x-msdos-program', 'application/x-sh', 'application/x-shellscript',
+    'application/x-php', 'application/x-httpd-php', 'application/x-asp',
+    'application/java-archive', 'application/vnd.ms-office.documentmacrosenabled',
+    'application/vnd.ms-excel.sheet.macroEnabled.12',
+    'application/vnd.ms-powerpoint.presentation.macroEnabled.12',
+    'application/vnd.ms-word.document.macroEnabled.12',
+    'text/x-script.python', 'text/x-script.perl', 'text/x-script.sh',
+];
+
+// 文件扩展名 → 图标映射
+const FILE_ICONS = {
+    // 图片
+    jpg:'🖼️', jpeg:'🖼️', png:'🖼️', gif:'🖼️', bmp:'🖼️', webp:'🖼️', svg:'🖼️', ico:'🖼️', tiff:'🖼️', tif:'🖼️',
+    // 文档
+    pdf:'📄', doc:'📝', docx:'📝', xls:'📊', xlsx:'📊', ppt:'📽️', pptx:'📽️',
+    txt:'📃', csv:'📋', md:'📝', rtf:'📄', odt:'📄', ods:'📊', odp:'📽️',
+    // 压缩包
+    zip:'📦', rar:'📦', '7z':'📦', tar:'📦', gz:'📦', bz2:'📦', xz:'📦',
+    // 音视频
+    mp3:'🎵', wav:'🎵', flac:'🎵', ogg:'🎵', aac:'🎵', m4a:'🎵', wma:'🎵',
+    mp4:'🎬', avi:'🎬', mov:'🎬', mkv:'🎬', wmv:'🎬', flv:'🎬', webm:'🎬',
+    // 代码
+    html:'💻', css:'🎨', js:'💻', json:'📋', xml:'📋', py:'🐍', c:'⚙️', cpp:'⚙️',
+    java:'☕', go:'🔵', rs:'🦀', ts:'💙', vue:'💚', jsx:'⚛️',
+    // 其他
+    default:'📁'
+};
+
+// ============================================================
+// 状态管理
+// ============================================================
+let selectedFiles = [];
+let githubToken = localStorage.getItem('github_token') || '';
+
+// 初始化
+document.addEventListener('DOMContentLoaded', () => {
+    if (githubToken) {
+        document.getElementById('tokenInput').value = '••••••••••••';
+        updateAuthStatus(true);
+    }
+    loadFileList();
+});
+
+// ============================================================
+// 认证相关
+// ============================================================
+function saveToken() {
+    const token = document.getElementById('tokenInput').value.trim();
+    if (!token) { showToast('请输入 Token', 'error'); return; }
+    
+    // 验证 Token 是否有效
+    fetch('https://api.github.com/user', {
+        headers: { 'Authorization': `token ${token}` }
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.login) {
+            githubToken = token;
+            localStorage.setItem('github_token', token);
+            document.getElementById('tokenInput').value = '••••••••••••';
+            updateAuthStatus(true);
+            showToast(`✅ 已授权: ${data.login}`, 'success');
+            loadFileList();
+        } else {
+            showToast('❌ Token 无效，请检查后重试', 'error');
+        }
+    })
+    .catch(() => showToast('❌ 验证失败，请检查网络', 'error'));
+}
+
+function logoutToken() {
+    githubToken = '';
+    localStorage.removeItem('github_token');
+    document.getElementById('tokenInput').value = '';
+    updateAuthStatus(false);
+    showToast('已退出登录', 'success');
+}
+
+function updateAuthStatus(ok) {
+    const el = document.getElementById('authStatus');
+    if (ok) {
+        el.innerHTML = `<span class="status-dot status-ok"></span><span>已授权 ✓ <button class="btn btn-danger btn-sm" onclick="logoutToken()" style="margin-left:10px">退出</button></span>`;
+    } else {
+        el.innerHTML = '<span class="status-dot status-no"></span><span>未授权 - 请输入 Token 以使用上传功能</span>';
+    }
+}
+
+function checkAuth() {
+    if (!githubToken) { showToast('请先输入 GitHub Token', 'error'); return false; }
+    return true;
+}
+
+// ============================================================
+// 文件选择与验证
+// ============================================================
+const dropZone = document.getElementById('dropZone');
+const fileInput = document.getElementById('fileInput');
+
+dropZone.onclick = () => fileInput.click();
+
+dropZone.ondragover = e => { e.preventDefault(); dropZone.classList.add('dragover'); };
+dropZone.ondragleave = e => { e.preventDefault(); dropZone.classList.remove('dragover'); };
+dropZone.ondrop = e => {
+    e.preventDefault(); dropZone.classList.remove('dragover');
+    addFiles([...e.dataTransfer.files]);
+};
+fileInput.onchange = () => addFiles([...fileInput.files]);
+
+function addFiles(files) {
+    for (const file of files) {
+        const check = validateFile(file);
+        selectedFiles.push({ file, ...check });
+    }
+    renderSelectedFiles();
+}
+
+function validateFile(file) {
+    const ext = file.name.split('.').pop().toLowerCase();
+    const errors = [];
+    let blocked = false;
+
+    // 1. 检查大小
+    if (file.size > CONFIG.maxSize) {
+        errors.push(`文件过大 (${formatSize(file.size)} > ${formatSize(CONFIG.maxSize)})`);
+        blocked = true;
+    }
+
+    // 2. 检查扩展名黑名单
+    if (BLOCKED_EXTS.includes(ext)) {
+        errors.push(`禁止上传 .${ext} 类型文件（可能危害系统安全）`);
+        blocked = true;
+    }
+
+    // 3. 检查 MIME 类型
+    const mime = file.type.toLowerCase();
+    if (BLOCKED_MIMES.some(m => mime.includes(m) || m.includes(mime))) {
+        errors.push(`禁止上传此类型文件（MIME: ${mime || '未知'}）`);
+        blocked = true;
+    }
+
+    // 4. 检查文件名（防止路径穿越等）
+    if (file.name.includes('..') || file.name.includes('/') || file.name.includes('\\')) {
+        errors.push('文件名包含非法字符');
+        blocked = true;
+    }
+
+    return { ext, mime, blocked, errors, icon: FILE_ICONS[ext] || FILE_ICONS.default };
+}
+
+function renderSelectedFiles() {
+    const container = document.getElementById('selectedFiles');
+    const btn = document.getElementById('uploadBtn');
+    const countEl = document.getElementById('fileCount');
+
+    if (!selectedFiles.length) {
+        container.innerHTML = '';
+        btn.disabled = true;
+        countEl.textContent = '0';
+        return;
+    }
+
+    const allowedCount = selectedFiles.filter(f => !f.blocked).length;
+    countEl.textContent = `${allowedCount} 个允许`;
+    btn.disabled = allowedCount === 0;
+
+    container.innerHTML = selectedFiles.map((item, i) => `
+        <div class="file-item ${item.blocked ? 'blocked' : 'allowed'}">
+            <div class="file-info">
+                <span class="file-icon">${item.icon}</span>
+                <div>
+                    <span class="file-name">${escapeHtml(item.file.name)}</span>
+                    <span class="file-meta">${formatSize(item.file.size)} · .${item.ext.toUpperCase()}</span>
+                    ${item.errors.length ? `<br><span style="color:var(--danger);font-size:12px">⚠️ ${item.errors.join('; ')}</span>` : ''}
+                </div>
+            </div>
+            <button class="file-remove" onclick="removeFile(${i})" title="移除">✕</button>
+        </div>
+    `).join('');
+}
+
+function removeFile(i) {
+    selectedFiles.splice(i, 1);
+    renderSelectedFiles();
+}
+
+function clearFiles() {
+    selectedFiles = [];
+    renderSelectedFiles();
+    document.getElementById('resultLog').innerHTML = '';
+    document.getElementById('progressWrap').style.display = 'none';
+}
+
+// ============================================================
+// 上传逻辑
+// ============================================================
+async function startUpload() {
+    if (!checkAuth()) return;
+
+    const allowed = selectedFiles.filter(f => !f.blocked);
+    if (!allowed.length) { showToast('没有可上传的文件', 'error'); return; }
+
+    const log = document.getElementById('resultLog');
+    const progressWrap = document.getElementById('progressWrap');
+    const progressFill = document.getElementById('progressFill');
+    const progressText = document.getElementById('progressText');
+
+    log.innerHTML = '';
+    progressWrap.style.display = 'block';
+
+    let success = 0, fail = 0, skipped = 0;
+    const total = allowed.length;
+
+    for (let i = 0; i < total; i++) {
+        const item = allowed[i];
+        const file = item.file;
+
+        // 更新进度
+        const pct = Math.round(((i) / total) * 100);
+        progressFill.style.width = pct + '%';
+        progressText.textContent = `正在上传 (${i+1}/${total}): ${file.name}`;
+
+        try {
+            const content = await toBase64(file);
+            
+            // 二次服务端验证：再次检查扩展名
+            const ext = file.name.split('.').pop().toLowerCase();
+            if (BLOCKED_EXTS.includes(ext)) {
+                log.innerHTML += `<div class="log-entry log-warn">⚠️ ${file.name} — 安全拦截：不允许的文件类型</div>`;
+                skipped++; continue;
+            }
+
+            const safeName = sanitizeFilename(file.name);
+            const path = `${CONFIG.uploadsDir}/${nowStr()}_${safeName}`;
+
+            const res = await fetch(
+                `https://api.github.com/repos/${CONFIG.repo}/contents/${encodeURIComponent(path)}`,
+                {
+                    method: 'PUT',
+                    headers: {
+                        'Authorization': `token ${githubToken}`,
+                        'Accept': 'application/vnd.github.v3+json'
+                    },
+                    body: JSON.stringify({
+                        message: `📤 Upload: ${safeName}`,
+                        content: content,
+                        branch: CONFIG.branch
+                    })
+                }
+            );
+
+            const data = await res.json();
+
+            if (res.ok && data.content) {
+                const dlUrl = data.content.download_url;
+                log.innerHTML += `<div class="log-entry log-success">✅ ${file.name} — <a href="${dlUrl}" target="_blank" class="file-link">下载链接</a></div>`;
+                success++;
+            } else {
+                log.innerHTML += `<div class="log-entry log-error">❌ ${file.name} — ${(data.message || '上传失败')}</div>`;
+                fail++;
+            }
+
+            // API 限速保护
+            await sleep(300);
+
+        } catch(e) {
+            log.innerHTML += `<div class="log-entry log-error">❌ ${file.name} — ${e.message}</div>`;
+            fail++;
+        }
+    }
+
+    // 完成
+    progressFill.style.width = '100%';
+    progressText.textContent = `完成！成功 ${success}，失败 ${fail}，跳过 ${skipped}`;
+    
+    if (success > 0) {
+        setTimeout(() => loadFileList(), 1000);
+        showToast(`上传完成！成功 ${success} 个文件`, 'success');
+    }
+}
+
+// ============================================================
+// 文件列表
+// ============================================================
+async function loadFileList() {
+    const container = document.getElementById('fileListContent');
+    
+    try {
+        const headers = {};
+        if (githubToken) headers['Authorization'] = `token ${githubToken}`;
+
+        const res = await fetch(
+            `https://api.github.com/repos/${CONFIG.repo}/contents/${CONFIG.uploadsDir}`,
+            { headers }
+        );
+
+        if (res.status === 404) {
+            container.innerHTML = '<div class="empty-state">暂无上传文件</div>';
+            return;
+        }
+
+        if (!res.ok) throw new Error('API error');
+
+        const files = await res.json();
+
+        if (!Array.isArray(files)) {
+            container.innerHTML = '<div class="empty-state">暂无上传文件</div>';
+            return;
+        }
+
+        // 按时间倒序
+        files.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
+        container.innerHTML = `
+            <table class="file-table">
+                <thead>
+                    <tr><th>文件名</th><th>大小</th><th>时间</th><th>操作</th></tr>
+                </thead>
+                <tbody>
+                    ${files.map(f => {
+                        const ext = f.name.split('.').pop().toLowerCase();
+                        const icon = FILE_ICONS[ext] || FILE_ICONS.default;
+                        // 去掉时间戳前缀显示
+                        const displayName = f.name.replace(/^\d+_/, '');
+                        return `
+                            <tr>
+                                <td>${icon} <a href="${f.download_url}" target="_blank" class="file-link">${escapeHtml(displayName)}</a></td>
+                                <td>${formatSize(f.size)}</td>
+                                <td style="font-size:12px;color:var(--gray)">${fmtTime(f.created_at)}</td>
+                                <td><a href="${f.download_url}" download class="btn btn-outline btn-sm">下载</a></td>
+                            </tr>`;
+                    }).join('')}
+                </tbody>
+            </table>
+            <p style="margin-top:12px;font-size:13px;color:var(--gray)">共 ${files.length} 个文件</p>
+        `;
+    } catch(e) {
+        container.innerHTML = `<div class="empty-state">加载失败: ${e.message}</div>`;
+    }
+}
+
+// ============================================================
+// 工具函数
+// ============================================================
+function toBase64(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result.split(',')[1]);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+    });
+}
+
+function sanitizeFilename(name) {
+    // 只保留安全的字符
+    return name.replace(/[^\u4e00-\u9fa5a-zA-Z0-9._\-()（）\[\]【】\s]/g, '_')
+               .replace(/\.{2,}/g, '.')
+               .replace(/^\.+/, '')
+               .substring(0, 200); // 限制长度
+}
+
+function nowStr() {
+    return new Date().toISOString().replace(/[-:T]/g, '').substring(0, 14);
+}
+
+function formatSize(bytes) {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / 1048576).toFixed(1) + ' MB';
+}
+
+function fmtTime(iso) {
+    const d = new Date(iso);
+    return `${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+}
+
+function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+}
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+function showToast(msg, type='success') {
+    const toast = document.createElement('div');
+    toast.className = `toast toast-${type}`;
+    toast.textContent = msg;
+    document.body.appendChild(toast);
+    setTimeout(() => toast.remove(), 3500);
+}
+</script>
+
+</body>
+</html>
