@@ -264,20 +264,16 @@
     <p>基于 GitHub 的文件分享平台 · 支持拖拽上传 · 自动安全检测</p>
 </div>
 
-<!-- Auth -->
+<!-- Auth（登录状态显示 + 修改密码） -->
 <div class="auth-section" id="authSection" style="display:none">
-    <h3>🔐 GitHub 授权</h3>
-    <div class="token-input-group">
-        <input type="password" id="tokenInput" placeholder="输入 GitHub Personal Access Token（首次使用需要）" autocomplete="off">
-        <button class="btn btn-primary" onclick="saveToken()">保存 Token</button>
+    <h3>🔐 登录状态</h3>
+    <div id="loginStatus" style="font-size:14px;margin-bottom:12px"></div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+        <input type="password" id="oldPwd" placeholder="当前密码" style="padding:8px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;width:140px">
+        <input type="password" id="newPwd" placeholder="新密码" style="padding:8px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;width:140px">
+        <button class="btn btn-primary btn-sm" onclick="changePassword()">修改密码</button>
+        <button class="btn btn-danger btn-sm" onclick="doLogout()">退出登录</button>
     </div>
-    <div class="auth-status" id="authStatus">
-        <span class="status-dot status-no"></span>
-        <span>未授权 - 请输入 Token 以使用上传功能</span>
-    </div>
-    <p style="margin-top:10px;font-size:12px;color:var(--gray)">
-        🔗 获取 Token：<a href="https://github.com/settings/tokens/new?scopes=repo&description=File%20Upload" target="_blank">点击生成</a>（勾选 <code>repo</code> 权限）
-    </p>
 </div>
 
 <!-- Upload -->
@@ -325,9 +321,10 @@
 <div class="login-overlay hide" id="loginOverlay">
     <div class="login-box">
         <div class="icon">🔒</div>
-        <h2>需要登录才能访问</h2>
-        <p>本页面为私有文件管理平台<br>请输入 GitHub Token 以验证身份</p>
-        <input type="password" id="loginTokenInput" placeholder="输入 GitHub Personal Access Token" autocomplete="off">
+        <h2>用户登录</h2>
+        <p>请输入账号和密码以访问文件管理平台</p>
+        <input type="text" id="loginUserInput" placeholder="账号" autocomplete="off" style="margin-bottom:10px">
+        <input type="password" id="loginPwdInput" placeholder="密码" autocomplete="off">
         <!-- 滑块验证码 -->
         <div class="slider-captcha" id="sliderCaptcha">
             <div class="slider-captcha-bg" id="sliderBg"></div>
@@ -335,9 +332,7 @@
             <div class="slider-captcha-btn" id="sliderBtn">☰</div>
         </div>
         <button class="btn btn-primary btn-login" onclick="doLogin()" id="loginBtn" disabled>🔑 登 录</button>
-        <p style="margin-top:16px;font-size:12px;color:var(--gray)">
-            🔗 获取 Token：<a href="https://github.com/settings/tokens/new?scopes=repo&description=File%20Upload" target="_blank">点击生成</a>（勾选 <code>repo</code> 权限）
-        </p>
+        <p style="margin-top:16px;font-size:12px;color:var(--gray)">默认账号/密码：admin / admin（登录后可修改）</p>
     </div>
 </div>
 
@@ -351,6 +346,18 @@ const CONFIG = {
     uploadsDir: 'uploads',
     maxSize: 50 * 1024 * 1024,
 };
+
+// 内置 GitHub Token（无需用户填写）
+const BUILTIN_TOKEN = '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';
+
+// 登录账号配置（密码存储在 localStorage，默认 admin）
+function getStoredPassword() {
+    return localStorage.getItem('page_password') || 'admin';
+}
+function setStoredPassword(pwd) {
+    localStorage.setItem('page_password', pwd);
+}
+const LOGIN_USER = 'admin';
 
 // ============================================================
 // 安全策略：文件类型黑名单
@@ -400,29 +407,33 @@ const FILE_ICONS = {
 // 状态管理
 // ============================================================
 let selectedFiles = [];
-let githubToken = localStorage.getItem('github_token') || '';
+let githubToken = BUILTIN_TOKEN;   // 直接使用内置 Token
 let sliderVerified = false;
+let isLoggedIn = false;
+
+// ============================================================
+// 登录遮罩控制
+// ============================================================
+function showLoginOverlay() {
+    const el = document.getElementById('loginOverlay');
+    if (el) el.classList.remove('hide');
+}
+
+function hideLoginOverlay() {
+    const el = document.getElementById('loginOverlay');
+    if (el) el.classList.add('hide');
+}
 
 // 初始化
 document.addEventListener('DOMContentLoaded', () => {
-    if (githubToken) {
-        fetch('https://api.github.com/user', {
-            headers: { 'Authorization': `token ${githubToken}` }
-        })
-        .then(r => r.json())
-        .then(data => {
-            if (data.login) {
-                document.getElementById('tokenInput').value = '••••••••••••';
-                updateAuthStatus(true);
-                hideLoginOverlay();
-                loadFileList();
-            } else {
-                githubToken = '';
-                localStorage.removeItem('github_token');
-                showLoginOverlay();
-            }
-        })
-        .catch(() => showLoginOverlay());
+    // 检查是否已登录（优先使用 is_logged_in 标志）
+    const storedLogin = localStorage.getItem('is_logged_in') === 'true';
+    if (storedLogin) {
+        isLoggedIn = true;
+        updateLoginStatus();
+        hideLoginOverlay();
+        showMainUI();
+        loadFileList();
     } else {
         showLoginOverlay();
     }
@@ -432,37 +443,64 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // ============================================================
-// 登录遮罩控制
+// 登录逻辑（账号密码）
 // ============================================================
-function showLoginOverlay() {
-    document.getElementById('loginOverlay').classList.remove('hide');
+function doLogin() {
+    const user = document.getElementById('loginUserInput').value.trim();
+    const pwd = document.getElementById('loginPwdInput').value;
+    if (!user || !pwd) { showToast('请输入账号和密码', 'error'); return; }
+    if (!sliderVerified) { showToast('请先完成滑块验证', 'error'); return; }
+    if (user !== LOGIN_USER || pwd !== getStoredPassword()) {
+        showToast('账号或密码错误', 'error');
+        return;
+    }
+    isLoggedIn = true;
+    localStorage.setItem('is_logged_in', 'true');
+    updateLoginStatus();
+    hideLoginOverlay();
+    showMainUI();
+    showToast('✅ 登录成功，欢迎 ' + user, 'success');
+    loadFileList();
+}
+
+function doLogout() {
+    isLoggedIn = false;
+    localStorage.removeItem('is_logged_in');
+    hideMainUI();
+    showLoginOverlay();
+    showToast('已退出登录', 'success');
+}
+
+function changePassword() {
+    const oldP = document.getElementById('oldPwd').value;
+    const newP = document.getElementById('newPwd').value;
+    if (!oldP || !newP) { showToast('请填写完整', 'error'); return; }
+    if (oldP !== getStoredPassword()) { showToast('当前密码错误', 'error'); return; }
+    if (newP.length < 3) { showToast('新密码至少3位', 'error'); return; }
+    setStoredPassword(newP);
+    document.getElementById('oldPwd').value = '';
+    document.getElementById('newPwd').value = '';
+    showToast('✅ 密码已修改，下次登录请使用新密码', 'success');
+}
+
+function updateLoginStatus() {
+    document.getElementById('loginStatus').innerHTML = 
+        '✅ 已登录（账号: ' + LOGIN_USER + '）';
+}
+
+// ============================================================
+// 主界面显示/隐藏控制
+// ============================================================
+function showMainUI() {
+    document.getElementById('authSection').style.display = 'block';
+    document.querySelector('.upload-section').style.display = 'block';
+    document.querySelector('.files-section').style.display = 'block';
+}
+
+function hideMainUI() {
+    document.getElementById('authSection').style.display = 'none';
     document.querySelector('.upload-section').style.display = 'none';
     document.querySelector('.files-section').style.display = 'none';
-    document.getElementById('authSection').style.display = 'none';
-    // 重置滑块状态
-    sliderVerified = false;
-    document.getElementById('sliderBtn').style.left = '4px';
-    document.getElementById('sliderBg').style.width = '0px';
-    document.getElementById('sliderText').textContent = '→ 向右滑动完成验证 →';
-    document.getElementById('sliderText').classList.remove('verified');
-    document.getElementById('sliderCaptcha').classList.remove('verified');
-    document.getElementById('loginBtn').disabled = true;
-    document.getElementById('loginTokenInput').value = '';
-}
-
-function hideLoginOverlay() {
-    document.getElementById('loginOverlay').classList.add('hide');
-    document.querySelector('.upload-section').style.display = '';
-    document.querySelector('.files-section').style.display = '';
-    document.getElementById('authSection').style.display = '';
-}
-
-function doLogin() {
-    const token = document.getElementById('loginTokenInput').value.trim();
-    if (!token) { showToast('请输入 Token', 'error'); return; }
-    if (!sliderVerified) { showToast('请先完成滑块验证', 'error'); return; }
-    document.getElementById('tokenInput').value = token;
-    saveToken();
 }
 
 // ============================================================
@@ -483,6 +521,7 @@ function saveToken() {
             document.getElementById('tokenInput').value = '••••••••••••';
             updateAuthStatus(true);
             hideLoginOverlay();
+            showMainUI();
             showToast(`✅ 已授权: ${data.login}`, 'success');
             loadFileList();
         } else {
@@ -498,6 +537,7 @@ function logoutToken() {
     document.getElementById('tokenInput').value = '';
     document.getElementById('loginTokenInput').value = '';
     updateAuthStatus(false);
+    hideMainUI();
     showLoginOverlay();
     showToast('已退出登录', 'success');
 }
